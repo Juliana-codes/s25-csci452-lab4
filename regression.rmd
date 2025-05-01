@@ -1,0 +1,147 @@
+---
+title: "Lab 4: Linear Regression"
+author: "Juliana Vinluan and Tim King"
+date: "2025-03-10"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+##### This report analyzes home prices using linear regression. We will examine the relationship between floor size and price, and then extend it to multiple regression by including the number of bedrooms.
+
+### Questions of Interest
+#### How are half-bathrooms represented? Why? Do you agree?
+##### - Half-bathrooms are counted as 0.1. This reflects that they add some value but not as much as a full bathroom. This allows for differentiation between full and half-baths. I agree with this representation since it accurately reflects the real-world concept of bathrooms.
+#### Why are the model prediction intervals very wide?
+##### - The model doesn't have variables like geographical neighborhood, condition of the property, landscaping, and features such as fireplaces and updated kitchens, leading to high variance in predictions.
+#### How is age represented?
+##### - Age is standardized as (year built - 1970) / 10 to center the values and allow for possible quadratic effects.
+#### Why is lot size discretized into categories?
+##### - Realtors categorize lot sizes into bins because small increases in land size affect price differently depending on the range. As explained in the article, a change from 4,000 to 6,000 would hold more weight than a change from 24,000 to 26,000.
+
+##### First, I will import the data set and load a library plot package to use later in this report.
+```{r load-packages}
+# Include plot library
+library(ggplot2)  # Visualization
+library(dplyr)    # Data manipulation
+# Import data set
+data <- read.table("homes76.dat.txt.txt", header=TRUE)
+colnames(data) <- c("id", "Price", "Size", "Lot", "Bath", "Bed", "BathBed", "Year", "Age", "AgeSq", "Garage", "Status", "D7", "Elem", "D8", "D9", "D10", "D11", "D12")
+colnames(data) <- make.names(colnames(data))
+```
+
+## Summary Statistics
+#### This helps to get an overview of the dataset before proceeding with the regression analysis.
+```{r check-data}
+data$Status <- as.factor(data$Status) # Convert to Factor w/ 3 levels "act","pen","sld"
+data$Elem <- as.factor(data$Elem) # Convert to Factor w/ 6 levels "adams","crest", "parker", "edge", "harris", "edison"
+head(data)   # View the first few rows
+str(data)    # Check the structure (columns, types)
+dim(data)    # Check dimensions (rows, columns)
+```
+
+## Simple Linear Regression (Price ~ Size)
+```{r regression-analysis}
+# Fit simple linear regression model
+model1 <- lm(Price ~ Size, data = data)
+summary(model1)
+coef(model1)["Size"] # Extract coefficient
+coef(model1)["(Intercept)"] # Extract intercept
+residuals <- model1$residuals # Extract residuals
+sqrt(mean(residuals^2)) # Calculate RMSE
+```
+
+### Questions of Interpretation
+- **Regression Equation**:`Price = 173.06 + 57.21 * Size`
+- **Slope (β1)**: 57.21 - Indicates how much the price increases per unit increase in floor size. So for every 1000 sqft increase, the price increases by $57,210.
+- **Intercept (β0)**: 173.06 - Represents the estimated price when the size is zero. So, the price of a house with zero size is $173,060. Technically you could interpret this as the cost of the land.
+- **R² Value**: R² = 0.04058 → This means that only 4.06% of the variance in house prices is explained by floor size alone. The adjusted value suggests that a multiple regression model might be more appropriate.
+- **Prediction error - RMSE**: The root mean squared error (RMSE) is a measure of the differences between predicted values and observed values. In this case, the RMSE is 118.7, which means that the model's predictions are off by an average of $118,700.
+
+### Prediction Intervals
+```{r confidence-prediction-intervals}
+new_data <- data.frame(Size = 1.95) # 1.95 * 1000 sqft
+conf_pred <- predict(model1, newdata = new_data, interval = "confidence")
+pred_pred <- predict(model1, newdata = new_data, interval = "prediction")
+
+# Extract components of confidence and prediction intervals
+point_pred_conf <- conf_pred[, 1]
+lower_conf <- conf_pred[, 2]
+upper_conf <- conf_pred[, 3]
+
+point_pred_pred <- pred_pred[, 1]
+lower_pred <- pred_pred[, 2]
+upper_pred <- pred_pred[, 3]
+
+# Combine results into a data frame and print
+results_conf <- data.frame(
+  Lower_Confidence = lower_conf,
+  Upper_Confidence = upper_conf
+)
+results_pred <- data.frame(
+  Lower_Prediction = lower_pred,
+  Upper_Prediction = upper_pred
+)
+```
+#### Find a point estimate for the price of a house with a floor size of 1950 square feet.
+``` {r point-estimate}
+print(point_pred_conf)
+```
+#### Find a 95% confidence interval for the true mean price for all homes with a floor size content of 1950 square feet.
+``` {r confidence-interval}
+print(results_conf)
+```
+#### Find a 95% prediction interval for a randomly chosen house with a floor size of 1950 square feet.
+```{r prediction-interval}
+print(results_pred)
+```
+
+### Visualization
+#### Create a scatter plot visualization that plots price versus floor size. Include a regression line to show the relationship.
+```{r}
+# Scatter plot with regression line
+ggplot(data, aes(x = Size, y = Price)) +
+  geom_point() +
+  geom_smooth(method = "lm", col = "blue") +
+  labs(title = "Price vs. Floor Size", x = "Size (1000 sqft)", y = "Price ($1000s)")
+```
+
+## Multiple Regression (Price ~ Size + Bed)
+```{r}
+# Fit multiple regression model
+model2 <- lm(Price ~ Size + Bed, data = data)
+summary(model2)
+coef(model2)["Size"] # Extract coefficient
+```
+- **Regression Equation**:`Price = 225.717 + (81.215 * Size) - (28.992 * Bed)`
+- **Floor Size Coefficient**: 81.215 - The price increases by $81,215 for every 1000 sqft increase in floor size. The p-value is 0.0117 which means it is statistically significant in explaining the price of houses.
+- **R² Value**: R² = 0.136  → The adjusted R² value is 0.136, which is higher than the simple regression model of 0.04058. This suggests that the multiple regression model explains 13.6% of the variance in house prices.
+
+### Comparison of Models
+```{r comparing-models}
+# Compare R-squared values
+cat("R-squared (Simple Regression):", summary(model1)$r.squared, "\n")
+cat("R-squared (Multiple Regression):", summary(model2)$r.squared, "\n")
+```
+
+### Residual Plot
+```{r residual-plot}
+# Residual plot
+plot(model2$residuals, main = "Residual Plot", ylab = "Residuals", xlab = "Index")
+abline(h = 0, col = "red")
+```
+
+##### There is no clear trend in the dot plotted around 0 above, meaning the residuals are randomly distributed. This is a good sign that the model is appropriate. They also show equal variance, meaning the spread of the residuals remains fairly constant as the predicted values change.
+
+#### Conclusions
+- This analysis explores simple and multiple regression models to predict home prices. The results highlight how adding predictors improves model accuracy.
+- The simple regression model shows a relationship between size and price.
+- The simple regression model has a low R² value of 4.06%, indicating a poor fit.
+- The simple regression model has wide prediction intervals due to missing predictors.
+- The multiple regression model includes bedrooms, improving the fit.
+- The multiple regression model explains 13.6% of the variance in house prices.
+- The residuals are randomly distributed, indicating a good model fit.
+- Further exploration could include additional predictors like lot elementry school, age, and location.
